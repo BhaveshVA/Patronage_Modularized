@@ -7,7 +7,7 @@ A Databricks Patronage data pipeline for ETL processing using Apache Spark and D
 This document is intentionally architecture-focused; operational runbooks and validation steps live in separate docs.
 ## High level Architecture
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph Sources
         direction LR
         CaregiverCSVs["Caregiver CSVs"]
@@ -77,7 +77,7 @@ flowchart TB
 ## ETL Workflow Diagram
 
 ```mermaid
-flowchart TD
+flowchart LR
     A[Raw Data Sources] --> B[File Discovery]
     B --> C[Data Preparation]
     C -- Deduplication --> D["Delta Manager SCD2 Upsert"]
@@ -115,7 +115,7 @@ Data lineage diagram showing how data moves from all sources, through each trans
 ## SCD2 Upsert Logic Flow
 
 ```mermaid
-flowchart TD
+flowchart LR
     A[Incoming Record] --> B{Record Exists in Delta Table?}
     B -- No --> C[Insert as New Record]
     B -- Yes --> D{Data Changed?}
@@ -137,7 +137,6 @@ SCD2 upsert logic flow showing how new, changed, and unchanged records are handl
 - **Operational tasks:** After core processing, scheduled DMDC export and monthly EDIPI backfill may run when gated.
 
 ## References
-<!-- - Original Databricks notebook: `Patronage V4.ipynb` -->
 - Delta Lake docs: https://docs.delta.io/latest/delta-intro.html
 - PySpark docs: https://spark.apache.org/docs/latest/api/python/
 
