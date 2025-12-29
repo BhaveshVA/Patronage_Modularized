@@ -22,7 +22,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 
-from databricks.sdk.runtime import *  # noqa: F403
+from databricks.sdk.runtime import *
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import asc, col
 
@@ -94,7 +94,7 @@ def _get_dmdc_last_run_date() -> datetime:
         if the table is empty or cannot be queried.
     """
     try:
-        result = spark.sql(f"SELECT max(checkpoint_timestamp) FROM {DMDC_CHECKPOINT_TABLE_NAME}").first()  # noqa: F405
+        result = spark.sql(f"SELECT max(checkpoint_timestamp) FROM {DMDC_CHECKPOINT_TABLE_NAME}").first()
         last_run = result[0] if result and result[0] else (datetime.now(timezone.utc) - timedelta(days=1))
         log_message(f"Last DMDC export run date: {last_run}", level="DEBUG", depth=2)
         return last_run

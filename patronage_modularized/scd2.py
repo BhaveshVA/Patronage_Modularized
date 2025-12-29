@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any, Optional, Tuple
 
-from databricks.sdk.runtime import *  # noqa: F403
+from databricks.sdk.runtime import *
 from delta.tables import DeltaTable
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import (
@@ -116,7 +116,7 @@ def identify_record_changes(dataframe: DataFrame, source_type: str) -> Tuple[Dat
     # For SCD, transform_scd_data already produced only changed rows.
     if source_type == SOURCE_TYPE_SCD:
         log_message("SCD changes pre-identified by new transform. Passing through.", level="DEBUG", depth=4)
-        unchanged_records = spark.createDataFrame([], dataframe.schema)  # noqa: F405
+        unchanged_records = spark.createDataFrame([], dataframe.schema)
         return dataframe, unchanged_records
 
     delta_conditions = SPARK_CONFIG[source_type]["delta_conditions"]

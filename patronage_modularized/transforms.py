@@ -27,7 +27,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from databricks.sdk.runtime import *  # noqa: F403
+from databricks.sdk.runtime import *
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import (
     broadcast,
@@ -92,7 +92,7 @@ def get_patronage_icn_edipi_fallback(participant_ids_df: DataFrame) -> Optional[
     """
     try:
         patronage_active = (
-            spark.table(PATRONAGE_TABLE_NAME)  # noqa: F405
+            spark.table(PATRONAGE_TABLE_NAME)
             .filter(col("RecordStatus") & (col("Batch_CD") == SOURCE_TYPE_SCD))
             .select(
                 "participant_id",
@@ -153,12 +153,12 @@ def get_pt_data_for_mode(processing_mode: str) -> DataFrame:
     if processing_mode == "rebuild":
         log_message("Loading and caching PT historical data (seed + delta)...", level="DEBUG", depth=2)
         pt_seed_data = (
-            spark.read.format("delta")  # noqa: F405
+            spark.read.format("delta")
             .load(pt_config["seed_file"])
             .selectExpr("PTCPNT_VET_ID as participant_id", "PT_35_FLAG as pt_indicator_value")
         )
         pt_delta_data = (
-            spark.read.format("delta")  # noqa: F405
+            spark.read.format("delta")
             .load(pt_config["delta_table"])
             .selectExpr("PTCPNT_VET_ID as participant_id", "PT_35_FLAG as pt_indicator_value")
         )
@@ -172,7 +172,7 @@ def get_pt_data_for_mode(processing_mode: str) -> DataFrame:
     else:
         log_message("Loading and caching PT delta data for update...", level="DEBUG", depth=2)
         pt_data = (
-            spark.read.format("delta")  # noqa: F405
+            spark.read.format("delta")
             .load(pt_config["delta_table"])
             .selectExpr("PTCPNT_VET_ID as participant_id", "PT_35_FLAG as pt_indicator_value")
             .filter(col("pt_indicator_value").isNotNull())
@@ -381,7 +381,7 @@ def transform_scd_data(raw_df: DataFrame, pt_data: DataFrame, processing_mode: s
     ).cache()
 
     target_active = (
-        spark.table(PATRONAGE_TABLE_NAME)  # noqa: F405
+        spark.table(PATRONAGE_TABLE_NAME)
         .filter(col("RecordStatus") & (col("Batch_CD") == SOURCE_TYPE_SCD))
         .select(
             "participant_id",
@@ -513,7 +513,7 @@ def create_and_transform_source_dataframe(
     if use_seed_data:
         # Seed is CG-only; maintained as a supported code path.
         raw_df = (
-            spark.read.csv(PIPELINE_CONFIG[source_type]["seed_file"], header=True, inferSchema=True)  # noqa: F405
+            spark.read.csv(PIPELINE_CONFIG[source_type]["seed_file"], header=True, inferSchema=True)
             .selectExpr("*", "_metadata.file_path as filename")
             .withColumn(
                 "SDP_Event_Created_Timestamp",
@@ -530,12 +530,12 @@ def create_and_transform_source_dataframe(
         schema = PIPELINE_CONFIG[source_type]["schema"]
 
         if not paths and source_type == SOURCE_TYPE_SCD:
-            raw_df = spark.createDataFrame([], schema).withColumn("filename", lit(None)).withColumn(  # noqa: F405
+            raw_df = spark.createDataFrame([], schema).withColumn("filename", lit(None)).withColumn(
                 "SDP_Event_Created_Timestamp", lit(None)
             )
         else:
             raw_df = (
-                spark.read.schema(schema)  # noqa: F405
+                spark.read.schema(schema)
                 .csv(paths, header=True)
                 .selectExpr(
                     "*",
@@ -573,7 +573,7 @@ def initialize_caregiver_seed_data() -> DataFrame:
     seed_file_path = PIPELINE_CONFIG[SOURCE_TYPE_CG]["seed_file"]
 
     caregiver_seed_data = (
-        spark.read.csv(seed_file_path, header=True, inferSchema=True)  # noqa: F405
+        spark.read.csv(seed_file_path, header=True, inferSchema=True)
         .selectExpr("*", "_metadata.file_path as filename")
         .withColumn(
             "SDP_Event_Created_Timestamp",

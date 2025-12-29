@@ -28,10 +28,10 @@ from datetime import datetime
 from typing import Any, Dict
 
 # Databricks injects runtime globals like `spark` and `dbutils`.
-# We import the runtime shim and suppress linter warnings (`# noqa`) that would
-# otherwise flag these names as undefined when editing outside Databricks.
-from databricks.sdk.runtime import *  # noqa: F403
-from pyspark.sql.functions import (  # noqa: F401
+# We import the runtime shim so these names are available when running in
+# Databricks, while still allowing local editing.
+from databricks.sdk.runtime import *
+from pyspark.sql.functions import (
     asc,
     broadcast,
     coalesce,
@@ -100,7 +100,7 @@ def optimize_delta_table(table_name: str) -> None:
     Args:
         table_name: Spark SQL table name.
     """
-    spark.sql(f"OPTIMIZE {table_name}")  # noqa: F405
+    spark.sql(f"OPTIMIZE {table_name}")
     log_message(f"Optimized table {table_name} (Liquid Clustering enabled)")
 
 

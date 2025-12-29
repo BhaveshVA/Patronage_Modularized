@@ -21,7 +21,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from databricks.sdk.runtime import *  # noqa: F403
+from databricks.sdk.runtime import *
 from delta.tables import DeltaTable
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col
@@ -78,7 +78,7 @@ def _get_edipi_backfill_candidates() -> Optional[DataFrame]:
     """
     log_message("Loading Identity Correlations...", depth=1)
     identity_correlations_df = (
-        spark.table(IDENTITY_TABLE_NAME)  # noqa: F405
+        spark.table(IDENTITY_TABLE_NAME)
         .filter(col("edipi").isNotNull())
         .selectExpr("MVIPersonICN as lu_ICN", "edipi as lu_edipi")
     )
@@ -93,7 +93,7 @@ def _get_edipi_backfill_candidates() -> Optional[DataFrame]:
         )
 
     log_message("Finding records with NULL EDIPI in the patronage table...", depth=1)
-    null_edipi_records = spark.table(PATRONAGE_TABLE_NAME).filter(col("RecordStatus") & col("edipi").isNull())  # noqa: F405
+    null_edipi_records = spark.table(PATRONAGE_TABLE_NAME).filter(col("RecordStatus") & col("edipi").isNull())
     null_count = null_edipi_records.count()
     log_message(f"Found {null_count:,} active records with a NULL EDIPI.", depth=2)
 
@@ -149,7 +149,7 @@ def _generate_edipi_backfill_file(backfill_candidates: DataFrame) -> None:
     output_filename = f"BACKFILL_EDIPI_PATRONAGE_{date_str}.txt"
     output_path = f"{DMDC_EXPORT_DIR}/{output_filename}"
 
-    pandas_df = spark.sql(dmdc_query)[["record"]].toPandas()  # noqa: F405
+    pandas_df = spark.sql(dmdc_query)[["record"]].toPandas()
 
     if not pandas_df.empty:
         local_path = _to_local_fuse_path(output_path)
@@ -178,7 +178,7 @@ def _update_patronage_with_backfilled_edipis(backfill_candidates: DataFrame) -> 
         - Merge keys differ by source type (CG uses additional business keys).
     """
     log_message("Executing table updates to backfill EDIPIs...", depth=1)
-    delta_table = DeltaTable.forName(spark, PATRONAGE_TABLE_NAME)  # noqa: F405
+    delta_table = DeltaTable.forName(spark, PATRONAGE_TABLE_NAME)
     total_updated = 0
 
     # Loop over PIPELINE_CONFIG.keys() order.

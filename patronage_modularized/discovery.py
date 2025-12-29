@@ -23,9 +23,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
-from databricks.sdk.runtime import *  # noqa: F403
+from databricks.sdk.runtime import *
 
-from pyspark.sql.functions import col, lit  # noqa: F401
+from pyspark.sql.functions import col, lit
 
 from .config import (
     PIPELINE_CONFIG,
@@ -59,7 +59,7 @@ def _get_last_processed_timestamp(source_type: str) -> Optional[datetime]:
     """
     try:
         query = f"SELECT MAX(SDP_Event_Created_Timestamp) FROM {PATRONAGE_TABLE_NAME} WHERE Batch_CD = '{source_type}'"
-        result = spark.sql(query).collect()[0][0]  # noqa: F405
+        result = spark.sql(query).collect()[0][0]
         if result:
             log_message(f"{source_type}: Last processed timestamp from table: {result}", level="DEBUG", depth=1)
             if result.tzinfo is None:
@@ -139,7 +139,7 @@ def discover_unprocessed_files(processing_mode: str) -> Dict[str, List[Tuple[str
         )
 
         try:
-            for file_info in dbutils.fs.ls(config["path"]):  # noqa: F405
+            for file_info in dbutils.fs.ls(config["path"]):
                 mod_time_utc = datetime.fromtimestamp(file_info.modificationTime / 1000, tz=timezone.utc)
 
                 if not (start_time_utc < mod_time_utc < time_boundary_utc):

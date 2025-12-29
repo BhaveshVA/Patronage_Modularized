@@ -30,9 +30,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
 
-from databricks.sdk.runtime import *  # noqa: F403
+from databricks.sdk.runtime import *
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import broadcast, col, first, lit, max, rank  # noqa: F401
+from pyspark.sql.functions import broadcast, col, first, lit, max, rank
 
 from . import state
 from .config import (
@@ -215,10 +215,10 @@ def build_identity_correlation_table(config: Dict[str, Any] = CORRELATION_CONFIG
     identity_start_time = time.time()
 
     log_message("Loading MVI data sources...", level="DEBUG", depth=1)
-    filtered_psa = _filter_psa_data(spark.read.parquet(config["psa"]["path"]), config["psa"])  # noqa: F405
-    filtered_person = _filter_person_data(spark.read.parquet(config["person"]["path"]), config["person"])  # noqa: F405
+    filtered_psa = _filter_psa_data(spark.read.parquet(config["psa"]["path"]), config["psa"])
+    filtered_person = _filter_person_data(spark.read.parquet(config["person"]["path"]), config["person"])
     filtered_institution = _filter_institution_data(
-        spark.read.parquet(config["institution"]["path"]), config["institution"]  # noqa: F405
+        spark.read.parquet(config["institution"]["path"]), config["institution"]
     )
 
     log_message("Processing joins and duplicates...", level="DEBUG", depth=1)
@@ -241,7 +241,7 @@ def build_identity_correlation_table(config: Dict[str, Any] = CORRELATION_CONFIG
     duplicate_correlations.cache()
 
     log_message("Saving tables with Liquid Clustering...", depth=1)
-    dbutils.fs.rm(IDENTITY_TABLE_PATH, True)  # noqa: F405
+    dbutils.fs.rm(IDENTITY_TABLE_PATH, True)
     (
         lookup_table.write.option("path", IDENTITY_TABLE_PATH)
         .option("overwriteSchema", "true")
@@ -252,7 +252,7 @@ def build_identity_correlation_table(config: Dict[str, Any] = CORRELATION_CONFIG
 
     optimize_delta_table(IDENTITY_TABLE_NAME)
 
-    dbutils.fs.rm(DUP_IDENTITY_TABLE_PATH, True)  # noqa: F405
+    dbutils.fs.rm(DUP_IDENTITY_TABLE_PATH, True)
     duplicate_correlations.write.option("path", DUP_IDENTITY_TABLE_PATH).mode("overwrite").saveAsTable(
         DUP_IDENTITY_TABLE_NAME
     )
@@ -279,7 +279,7 @@ def _check_daily_identity_rebuild_needed() -> bool:
         The pipeline expects the identity correlation to be refreshed daily.
     """
     try:
-        detail = spark.sql(f"DESCRIBE DETAIL delta.`{IDENTITY_TABLE_PATH}`").collect()  # noqa: F405
+        detail = spark.sql(f"DESCRIBE DETAIL delta.`{IDENTITY_TABLE_PATH}`").collect()
         if detail:
             last_modified = detail[0]["lastModified"]
             last_modified_date = last_modified.date() if hasattr(last_modified, "date") else last_modified
@@ -316,7 +316,7 @@ def initialize_identity_lookup() -> DataFrame:
         ]
 
         state.identity_lookup_table = (
-            spark.read.format("delta")  # noqa: F405
+            spark.read.format("delta")
             .load(IDENTITY_TABLE_PATH)
             .withColumnRenamed("MVIPersonICN", "ICN")
             .select(*identity_columns_to_select)

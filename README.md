@@ -158,6 +158,7 @@ Purpose:
 - Orchestrates the end-to-end pipeline lifecycle (init, discover, transform, merge, scheduled tasks).
 
 Functions:
+- `reset_patronage_table`
 - `initialize_all_tables`
 - `process_patronage_data`
 - `run_pipeline`
@@ -189,6 +190,7 @@ Notes:
 ### Which mode should I run?
 - **`update`** (normal daily run): processes new inbound files since the last processed timestamp in the Patronage target table.
 - **`rebuild`** (special / operational run): processes historical inbound files starting at each source’s configured `beginning_date`.
+  - Warning: `rebuild` performs a full reset of the Patronage target table (drops the table and deletes the underlying Delta storage files).
   - Note: rebuild file discovery intentionally stops at the **end of the previous month** (UTC). This is by design to avoid partial-month boundary churn.
 
 ### Minimal commands (copy/paste)

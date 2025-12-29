@@ -248,7 +248,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from databricks.sdk.runtime import *  # noqa: F403
+from databricks.sdk.runtime import *
 from delta.tables import DeltaTable
 
 from . import config, state
@@ -272,6 +272,35 @@ from .scheduled import is_last_friday_of_month, run_edipi_backfill
 from .transforms import create_and_transform_source_dataframe, get_pt_data_for_mode, initialize_caregiver_seed_data
 
 
+def reset_patronage_table() -> None:
+    """Fully reset the Patronage Delta table (metadata + underlying files).
+
+    This is a destructive operation intended for "rebuild" mode only.
+
+    Notes:
+        - Drops the SQL table if it exists.
+        - Deletes the underlying Delta storage path (recursive).
+        - Does not modify the DMDC checkpoint table.
+    """
+    log_message("REBUILD: FULL RESET of Patronage target table requested.", level="WARN", depth=1)
+    log_message(f"Dropping table if exists: {PATRONAGE_TABLE_NAME}", level="WARN", depth=2)
+    spark.sql(f"DROP TABLE IF EXISTS {PATRONAGE_TABLE_NAME}")
+
+    # Clear any cached handle so downstream code must re-initialize.
+    state.target_delta_table = None
+
+    log_message(f"Deleting Delta files at: {PATRONAGE_TABLE_PATH}", level="WARN", depth=2)
+    try:
+        dbutils.fs.rm(PATRONAGE_TABLE_PATH, True)
+    except Exception as e:
+        message = str(e)
+        if "FileNotFoundException" in message or "does not exist" in message or "No such file" in message:
+            log_message("Delta path not found; skipping delete.", level="DEBUG", depth=3)
+        else:
+            log_message(f"Failed to delete Patronage Delta path: {e}", level="ERROR", depth=2)
+            raise
+
+
 def initialize_all_tables() -> None:
     """Create required Delta tables if they do not already exist.
 
@@ -291,8 +320,8 @@ def initialize_all_tables() -> None:
             {PATRONAGE_TABLE_SCHEMA}
         ) CLUSTER BY ({PATRONAGE_TABLE_CLUSTER_COLUMNS}) LOCATION '{PATRONAGE_TABLE_PATH}'
     """
-    spark.sql(patronage_create_sql)  # noqa: F405
-    state.target_delta_table = DeltaTable.forPath(spark, PATRONAGE_TABLE_PATH)  # noqa: F405
+    spark.sql(patronage_create_sql)
+    state.target_delta_table = DeltaTable.forPath(spark, PATRONAGE_TABLE_PATH)
     log_message(f"Table '{PATRONAGE_TABLE_NAME}' is ready.", level="DEBUG", depth=1)
 
     log_message(f"Initializing table: {DMDC_CHECKPOINT_TABLE_NAME}", depth=1)
@@ -304,7 +333,7 @@ def initialize_all_tables() -> None:
             generate_query STRING
         )
     """
-    spark.sql(checkpoint_create_sql)  # noqa: F405
+    spark.sql(checkpoint_create_sql)
     log_message(f"Table '{DMDC_CHECKPOINT_TABLE_NAME}' is ready.", level="DEBUG", depth=1)
 
 
@@ -313,6 +342,8 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
 
     Args:
         processing_mode: "rebuild" or "update".
+                        - "rebuild" is destructive: it drops the Patronage target table and deletes the underlying Delta files
+                            before reprocessing historical inputs.
         verbose_logging: Enables additional debug metrics and counts.
 
     Returns:
@@ -334,6 +365,9 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
     start_time = time.time()
 
     try:
+        if processing_mode == "rebuild":
+            reset_patronage_table()
+
         initialize_all_tables()
         if state.target_delta_table is None:
             raise RuntimeError("Target Delta table was not initialized.")
@@ -436,7 +470,7 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
           - Wed/Fri: DMDC export.
     """
     try:
-        spark.conf.set("spark.sql.session.timeZone", "UTC")  # noqa: F405
+        spark.conf.set("spark.sql.session.timeZone", "UTC")
         log_message("Pinned spark.sql.session.timeZone to UTC", level="DEBUG", depth=1)
 
         has_processed = process_patronage_data(processing_mode, verbose_logging)
