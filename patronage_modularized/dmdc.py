@@ -19,6 +19,7 @@ Operational note (important for reliability in Jobs):
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 
@@ -192,7 +193,10 @@ def _update_dmdc_checkpoint(today_start_time: datetime, output_path: str, record
         We escape single quotes to store the query as a string literal.
     """
     try:
-        escaped_query = query.replace("'", "\\'")
+        # Store a normalized one-line query for easier auditing/grep.
+        # (Do not change the executed SQL; only the stored string.)
+        normalized_query = re.sub(r"\s+", " ", query).strip()
+        escaped_query = normalized_query.replace("'", "\\'")
         checkpoint_literal = _format_spark_timestamp_utc(today_start_time)
         spark.sql(
             f"""
