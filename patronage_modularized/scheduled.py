@@ -146,7 +146,7 @@ def _generate_edipi_backfill_file(backfill_candidates: DataFrame) -> None:
 
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     date_str = today.strftime(PY_DATE_COMPACT_FORMAT)
-    output_filename = f"BACKFILL_EDIPI_PATRONAGE_{date_str}.txt"
+    output_filename = f"LAGGED_EDIPI_PATRONAGE_{date_str}.txt"
     output_path = f"{DMDC_EXPORT_DIR}/{output_filename}"
 
     pandas_df = spark.sql(dmdc_query)[["record"]].toPandas()
