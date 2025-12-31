@@ -373,6 +373,6 @@ IDENTITY_TABLE_NAME = "correlation_lookup"
 IDENTITY_TABLE_PATH = f"/mnt/ci-patronage/delta_tables/{IDENTITY_TABLE_NAME}"
 DUP_IDENTITY_TABLE_NAME = "duplicate_correlations"
 DUP_IDENTITY_TABLE_PATH = f"/mnt/ci-patronage/delta_tables/{DUP_IDENTITY_TABLE_NAME}"
-DMDC_CHECKPOINT_TABLE_NAME = "dmdc_checkpoint_test"
+DMDC_CHECKPOINT_TABLE_NAME = "dmdc_checkpoint"
 
-DMDC_EXPORT_DIR = "dbfs/mnt/ci-patronage/dmdc_extracts/test/combined_export"
+DMDC_EXPORT_DIR = "dbfs:/mnt/ci-patronage/dmdc_extracts/combined_export"
