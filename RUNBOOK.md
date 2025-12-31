@@ -225,3 +225,7 @@ All operational knobs live in `patronage_modularized/config.py`, including:
 - DMDC checkpoint table name
 - DMDC export directory
 
+When adjusting these operational knobs:
+- Coordinate changes with the on-call or pipeline owner, especially around deployment or cutover windows.
+- Review the impact on scheduled runs (DMDC export and EDIPI backfill) and any downstream consumers before committing.
+- Prefer small, incremental changes and validate in a lower environment where possible.
