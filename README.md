@@ -2,6 +2,11 @@
 
 This folder contains the Patronage pipeline implemented as a modular Python package designed to run in Databricks.
 
+## Documentation
+- Operations runbook: `RUNBOOK.md`
+- Validation checklist: `VALIDATION_CHECKLIST.md`
+- Architecture diagrams: `HIGH_LEVEL_ARCHITECTURE.md`
+
 ## Pipeline overview
 This pipeline is organized around a few core responsibilities:
 - **Table initialization**: ensures the target Patronage Delta table exists and the DMDC checkpoint table is available.
@@ -231,7 +236,7 @@ All values below live in `patronage_modularized/config.py`.
 - **DMDC checkpoint table**
   - `DMDC_CHECKPOINT_TABLE_NAME = "dmdc_checkpoint"`
 - **DMDC export directory**
-  - `DMDC_EXPORT_DIR = "dbfs/mnt/ci-patronage/dmdc_extracts/combined_export"`
+  - `DMDC_EXPORT_DIR = "dbfs:/mnt/ci-patronage/dmdc_extracts/combined_export"`
   - The writer converts DBFS paths to a local `/dbfs/...` FUSE path before using pandas.
 
 ### Inbound sources (file discovery rules)

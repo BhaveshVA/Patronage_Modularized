@@ -8,7 +8,7 @@ This checklist validates the behavior and outputs of the `patronage_modularized`
   - `pipeline.run_pipeline('update', verbose_logging=False)`
 - Confirm all required tables exist:
   - `patronage_unified`
-  - `dmdc_checkpoint_test`
+  - `dmdc_checkpoint`
   - `correlation_lookup`
 
 ## 2) Patronage table checks (high-level)
@@ -39,7 +39,7 @@ This checklist validates the behavior and outputs of the `patronage_modularized`
   - Newlines are Unix (`\n`)
   - Sort order: `Batch_CD`, then `edipi`
 - Check checkpoint insert:
-  - `SELECT * FROM dmdc_checkpoint_test ORDER BY checkpoint_timestamp DESC LIMIT 5`
+  - `SELECT * FROM dmdc_checkpoint ORDER BY checkpoint_timestamp DESC LIMIT 5`
 
 ## 6) Performance sanity
 - Verify no unexpected full scans on daily update runs.
