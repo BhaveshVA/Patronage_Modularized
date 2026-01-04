@@ -24,6 +24,7 @@ are available (via the Databricks runtime).
 """
 
 import inspect
+import time
 from datetime import datetime
 from typing import Any, Dict
 
@@ -60,6 +61,38 @@ from pyspark.sql.window import Window
 # LOGGING CONFIGURATION
 # =====================================================================================
 LOGGING_VERBOSE = False
+
+
+class Stopwatch:
+    """Simple stopwatch for measuring elapsed time.
+
+    We use `time.perf_counter()` (monotonic, high-resolution) to measure
+    durations reliably.
+
+    Note:
+        `time.time()` is a wall-clock timestamp and can jump forward/backward
+        (e.g., NTP clock sync), which makes it less reliable for elapsed-time
+        measurement.
+    """
+
+    def __init__(self) -> None:
+        self._start = time.perf_counter()
+
+    def seconds(self) -> float:
+        return time.perf_counter() - self._start
+
+    def minutes(self) -> float:
+        return self.seconds() / 60.0
+
+    def format(self, unit: str = "minutes", precision: int = 2) -> str:
+        if unit == "seconds":
+            value = self.seconds()
+        elif unit == "minutes":
+            value = self.minutes()
+        else:
+            raise ValueError("unit must be 'seconds' or 'minutes'")
+
+        return f"{value:.{precision}f} {unit}"
 
 # =====================================================================================
 # SOURCE TYPE CONSTANTS

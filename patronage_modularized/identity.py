@@ -26,7 +26,6 @@ Databricks assumptions:
 
 from __future__ import annotations
 
-import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
 
@@ -43,6 +42,7 @@ from .config import (
     IDENTITY_TABLE_NAME,
     IDENTITY_TABLE_PATH,
     INSTITUTION_MAPPING,
+    Stopwatch,
     log_message,
     optimize_delta_table,
 )
@@ -212,7 +212,7 @@ def build_identity_correlation_table(config: Dict[str, Any] = CORRELATION_CONFIG
         - Runs `OPTIMIZE` on the identity lookup table.
     """
     log_message("Building Identity Correlation Table...")
-    identity_start_time = time.time()
+    identity_timer = Stopwatch()
 
     log_message("Loading MVI data sources...", level="DEBUG", depth=1)
     filtered_psa = _filter_psa_data(spark.read.parquet(config["psa"]["path"]), config["psa"])
@@ -264,8 +264,7 @@ def build_identity_correlation_table(config: Dict[str, Any] = CORRELATION_CONFIG
     person_institution_dups.unpersist()
     institution_identifier_dups.unpersist()
 
-    identity_end_time = time.time()
-    log_message(f"Identity Correlation Table built in {(identity_end_time - identity_start_time) / 60:.2f} minutes.")
+    log_message(f"Identity Correlation Table built in {identity_timer.format()}.")
 
 
 def _check_daily_identity_rebuild_needed() -> bool:

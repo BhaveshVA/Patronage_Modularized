@@ -244,8 +244,6 @@ Troubleshooting themes:
 """
 
 from __future__ import annotations
-
-import time
 from typing import Any
 
 from databricks.sdk.runtime import *
@@ -362,7 +360,7 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
     """
     config.LOGGING_VERBOSE = verbose_logging
     log_message(f"Starting Patronage Pipeline in {processing_mode.upper()} mode")
-    start_time = time.time()
+    pipeline_timer = config.Stopwatch()
 
     try:
         if processing_mode == "rebuild":
@@ -377,7 +375,7 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
         for source_type in PIPELINE_CONFIG.keys():
             if unprocessed_files[source_type]:
                 log_message(f"Processing '{source_type}' source...")
-                source_start_time = time.time()
+                source_timer = config.Stopwatch()
 
                 pt_data_for_source = None
                 if source_type == SOURCE_TYPE_SCD:
@@ -399,7 +397,7 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
                         depth=1,
                     )
                     for i, (file_path, mod_time) in enumerate(unprocessed_files[source_type]):
-                        file_start_time = time.time()
+                        file_timer = config.Stopwatch()
                         log_message(
                             f"Processing file {i+1}/{len(unprocessed_files[source_type])}: {file_path.split('/')[-1]}",
                             depth=2,
@@ -412,11 +410,11 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
                         )
                         execute_scd_pipeline_for_source(transformed_df, source_type)
                         log_message(
-                            f"Finished file {i+1} in {(time.time() - file_start_time) / 60:.2f} minutes.",
+                            f"Finished file {i+1} in {file_timer.format()}.",
                             depth=2,
                         )
                 else:
-                    file_start_time = time.time()
+                    batch_timer = config.Stopwatch()
                     log_message(
                         f"Processing {len(unprocessed_files[source_type])} {source_type} file(s) in a single batch...",
                         depth=1,
@@ -429,12 +427,11 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
                     )
                     execute_scd_pipeline_for_source(transformed_df, source_type)
                     log_message(
-                        f"Finished processing all '{source_type}' files in {(time.time() - file_start_time) / 60:.2f} minutes.",
+                        f"Finished processing all '{source_type}' files in {batch_timer.format()}.",
                         depth=2,
                     )
 
-                total_source_time = (time.time() - source_start_time) / 60
-                log_message(f"Finished processing all '{source_type}' data in {total_source_time:.2f} minutes.")
+                log_message(f"Finished processing all '{source_type}' data in {source_timer.format()}.")
 
         if not any(unprocessed_files.values()):
             log_message("No unprocessed SCD or CG files found. Skipping main processing.")
@@ -451,8 +448,7 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
             state.pt_data_cache.unpersist()
             state.pt_data_cache = None
 
-        end_time = time.time()
-        log_message(f"Patronage Pipeline ({processing_mode.upper()}) finished in {(end_time - start_time) / 60:.2f} minutes.")
+        log_message(f"Patronage Pipeline ({processing_mode.upper()}) finished in {pipeline_timer.format()}.")
 
 
 def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
