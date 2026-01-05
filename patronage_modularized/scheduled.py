@@ -37,8 +37,8 @@ from .config import (
     SOURCE_TYPE_SCD,
     build_dmdc_record_sql,
     log_message,
+    write_unix_text_file_no_blank_eof,
 )
-from .dmdc import _to_local_fuse_path
 
 
 def is_last_friday_of_month(run_date: Optional[date] = None) -> bool:
@@ -129,8 +129,7 @@ def _generate_edipi_backfill_file(backfill_candidates: DataFrame) -> None:
         Writes a text file to `DMDC_EXPORT_DIR`.
 
     Notes:
-        - We use `_to_local_fuse_path` to convert DBFS URIs into `/dbfs/...`
-          paths for pandas writes (reliability in Jobs).
+        - We use `config.to_local_fuse_path`/DBFS FUSE to write reliably in Jobs.
         - Output ordering is stable by `(Batch_CD, lu_edipi)`.
     """
     log_message("Generating DMDC export file for backfilled records...", depth=1)
@@ -152,8 +151,8 @@ def _generate_edipi_backfill_file(backfill_candidates: DataFrame) -> None:
     pandas_df = spark.sql(dmdc_query)[["record"]].toPandas()
 
     if not pandas_df.empty:
-        local_path = _to_local_fuse_path(output_path)
-        pandas_df.to_csv(local_path, header=False, index=False, sep="\t", encoding="utf-8", lineterminator="\n")
+        records = pandas_df["record"].astype(str).tolist()
+        write_unix_text_file_no_blank_eof(output_path, records, encoding="utf-8")
         log_message(f"Successfully generated DMDC backfill file: {output_path}", depth=2)
 
         from . import config

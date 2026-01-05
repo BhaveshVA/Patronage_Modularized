@@ -37,6 +37,8 @@ from .config import (
     SOURCE_TYPE_SCD,
     build_dmdc_record_sql,
     log_message,
+    to_local_fuse_path,
+    write_unix_text_file_no_blank_eof,
 )
 
 
@@ -64,27 +66,8 @@ def _format_spark_timestamp_utc(dt: datetime) -> str:
 
 
 def _to_local_fuse_path(dbfs_path: str) -> str:
-    """Convert a DBFS path/URI into a local `/dbfs/...` FUSE path.
-
-    Args:
-        dbfs_path: A DBFS-style path. Common forms include:
-            - `dbfs:/mnt/...`
-            - `dbfs/mnt/...`
-            - `/dbfs/mnt/...` (already local FUSE)
-
-    Returns:
-        A path usable with local filesystem APIs (pandas, os.path, open).
-
-    Notes:
-        This function intentionally leaves non-DBFS paths unchanged.
-    """
-    if dbfs_path.startswith("/dbfs/"):
-        return dbfs_path
-    if dbfs_path.startswith("dbfs:/"):
-        return "/dbfs/" + dbfs_path[len("dbfs:/") :]
-    if dbfs_path.startswith("dbfs/"):
-        return "/dbfs/" + dbfs_path[len("dbfs/") :]
-    return dbfs_path
+    """Backward-compatible wrapper (prefer `config.to_local_fuse_path`)."""
+    return to_local_fuse_path(dbfs_path)
 
 
 def _get_dmdc_last_run_date() -> datetime:
@@ -166,8 +149,10 @@ def _write_dmdc_file(dmdc_df: DataFrame, record_count: int) -> str:
     dbutils.fs.mkdirs(DMDC_EXPORT_DIR)
 
     pandas_df = dmdc_df.select("DMDC_Record").toPandas()
+    records = pandas_df["DMDC_Record"].astype(str).tolist() if "DMDC_Record" in pandas_df.columns else []
+    write_unix_text_file_no_blank_eof(output_path, records, encoding="utf-8")
+
     local_path = _to_local_fuse_path(output_path)
-    pandas_df.to_csv(local_path, header=False, index=False, encoding="utf-8", lineterminator="\n")
 
     from . import config
 

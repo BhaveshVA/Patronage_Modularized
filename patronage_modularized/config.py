@@ -25,8 +25,9 @@ are available (via the Databricks runtime).
 
 import inspect
 import time
+from pathlib import PurePosixPath
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Iterable, List
 
 # Databricks injects runtime globals like `spark` and `dbutils`.
 # We import the runtime shim so these names are available when running in
@@ -121,6 +122,81 @@ def log_message(message: str, level: str = "INFO", depth: int = 0) -> None:
             print(f"[{level:5}] | {timestamp} | {caller_str:40} | {indent}{message}")
         else:
             print(f"[{level:5}] | {timestamp} | {indent}{message}")
+
+
+def to_local_fuse_path(dbfs_path: str) -> str:
+    """Convert a DBFS path/URI into a local `/dbfs/...` FUSE path.
+
+    Databricks Python file APIs (and pandas) write to the local filesystem.
+    DBFS provides a FUSE mount at `/dbfs/...`, so we translate DBFS URIs.
+
+    Accepts:
+        - `dbfs:/mnt/...`
+        - `dbfs/mnt/...`
+        - `/dbfs/mnt/...` (already local)
+
+    Returns:
+        Local path suitable for `open(...)`, `os.path.*`, pandas, etc.
+    """
+    if dbfs_path.startswith("/dbfs/"):
+        return dbfs_path
+    if dbfs_path.startswith("dbfs:/"):
+        return "/dbfs/" + dbfs_path[len("dbfs:/") :]
+    if dbfs_path.startswith("dbfs/"):
+        return "/dbfs/" + dbfs_path[len("dbfs/") :]
+    return dbfs_path
+
+
+def _dbfs_parent_dir(dbfs_path: str) -> str:
+    """Return the DBFS-style parent directory for a DBFS path/URI."""
+    if dbfs_path.startswith("dbfs:/"):
+        return str(PurePosixPath(dbfs_path).parent)
+    if dbfs_path.startswith("/dbfs/"):
+        # Convert to dbfs:/ style for dbutils.fs
+        rel = dbfs_path[len("/dbfs/") :]
+        return str(PurePosixPath("dbfs:/") / PurePosixPath(rel).parent)
+    # Already a relative/posix path used with dbutils.fs
+    return str(PurePosixPath(dbfs_path).parent)
+
+
+def write_unix_text_file_no_blank_eof(
+    output_path: str,
+    records: Iterable[str],
+    *,
+    encoding: str = "utf-8",
+    fail_on_blank_records: bool = True,
+) -> None:
+    """Write newline-delimited records with Unix LF and no blank line at EOF.
+
+    This helper is intended for Databricks exports that land in DBFS.
+
+    Behavior:
+        - Ensures the DBFS parent directory exists.
+        - Writes using Unix line endings (`\n`) regardless of OS.
+        - Does not add a trailing newline (prevents a blank final record).
+
+    Args:
+        output_path: DBFS output path (usually `dbfs:/...` or `/dbfs/...`).
+        records: Iterable of record strings (one per output line).
+        encoding: Text encoding.
+        fail_on_blank_records: If True, raises if any record is empty/blank.
+    """
+
+    # Ensure export directory exists in DBFS.
+    try:
+        dbutils.fs.mkdirs(_dbfs_parent_dir(output_path))
+    except Exception:
+        # If running outside Databricks, let the subsequent write raise.
+        pass
+
+    record_list: List[str] = ["" if r is None else str(r) for r in records]
+
+    if fail_on_blank_records and any(r == "" for r in record_list):
+        raise ValueError("Export contains blank record(s); refusing to write file.")
+
+    local_path = to_local_fuse_path(output_path)
+    with open(local_path, "w", encoding=encoding, newline="\n") as f:
+        f.write("\n".join(record_list))
 
 
 def optimize_delta_table(table_name: str) -> None:
