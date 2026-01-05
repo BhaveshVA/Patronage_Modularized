@@ -178,19 +178,9 @@ def _update_dmdc_checkpoint(today_start_time: datetime, output_path: str, record
         We escape single quotes to store the query as a string literal.
     """
     try:
-        # Freeze any non-deterministic SQL (e.g., current_date()) in the *stored*
-        # query text so audits can reproduce the exact run.
-        run_date_str = today_start_time.date().strftime("%Y%m%d")
-        frozen_query = re.sub(
-            r"date_format\s*\(\s*current_date\s*\(\s*\)\s*,\s*'yyyyMMdd'\s*\)",
-            f"'{run_date_str}'",
-            query,
-            flags=re.IGNORECASE,
-        )
-
         # Store a normalized one-line query for easier auditing/grep.
         # (Do not change the executed SQL; only the stored string.)
-        normalized_query = re.sub(r"\s+", " ", frozen_query).strip()
+        normalized_query = re.sub(r"\s+", " ", query).strip()
         escaped_query = normalized_query.replace("'", "\\'")
         checkpoint_literal = _format_spark_timestamp_utc(today_start_time)
         spark.sql(
