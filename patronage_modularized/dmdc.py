@@ -181,7 +181,24 @@ def _update_dmdc_checkpoint(today_start_time: datetime, output_path: str, record
         # Store a normalized one-line query for easier auditing/grep.
         # (Do not change the executed SQL; only the stored string.)
         normalized_query = re.sub(r"\s+", " ", query).strip()
-        escaped_query = normalized_query.replace("'", "\\'")
+        run_date = today_start_time.date()
+        run_ymd = run_date.strftime("%Y%m%d")
+        run_iso = run_date.strftime("%Y-%m-%d")
+
+        frozen_query = re.sub(
+            r"date_format\s*\(\s*current_date\s*\(\s*\)\s*,\s*'yyyyMMdd'\s*\)",
+            f"'{run_ymd}'",
+            normalized_query,
+            flags=re.IGNORECASE,
+        )
+        frozen_query = re.sub(
+            r"current_date\s*\(\s*\)",
+            f"DATE '{run_iso}'",
+            frozen_query,
+            flags=re.IGNORECASE,
+        )
+
+        escaped_query = frozen_query.replace("'", "\\'")
         checkpoint_literal = _format_spark_timestamp_utc(today_start_time)
         spark.sql(
             f"""
