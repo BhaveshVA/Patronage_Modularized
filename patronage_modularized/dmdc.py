@@ -47,6 +47,8 @@ def is_dmdc_transfer_day() -> bool:
 
     Transfer days are Wednesday and Friday.
     """
+    # To run daily (7 days/week), replace the return below with: return True
+    # If DMDC cadence changes to daily, update the Daily Freshness Monitor DMDC `expected_days` accordingly (likely 1).
     return datetime.now(timezone.utc).date().weekday() in [2, 4]  # Wed=2, Fri=4
 
 
@@ -239,11 +241,10 @@ def generate_dmdc_transfer_file() -> None:
 
     from . import config
 
-    if config.LOGGING_VERBOSE:
-        cg_count = dmdc_df.filter(col("Batch_CD") == SOURCE_TYPE_CG).count()
-        scd_count = dmdc_df.filter(col("Batch_CD") == SOURCE_TYPE_SCD).count()
-        log_message(f"     Number of Caregivers records: {cg_count}")
-        log_message(f"     Number of SCD records: {scd_count}")
+    cg_count = dmdc_df.filter(col("Batch_CD") == SOURCE_TYPE_CG).count()
+    scd_count = dmdc_df.filter(col("Batch_CD") == SOURCE_TYPE_SCD).count()
+    log_message(f"     Number of Caregivers records: {cg_count}")
+    log_message(f"     Number of SCD records: {scd_count}")
 
     output_path = _write_dmdc_file(dmdc_df, record_count)
     _update_dmdc_checkpoint(today_start_time, output_path, record_count, query)
