@@ -243,8 +243,8 @@ def generate_dmdc_transfer_file() -> None:
 
     cg_count = dmdc_df.filter(col("Batch_CD") == SOURCE_TYPE_CG).count()
     scd_count = dmdc_df.filter(col("Batch_CD") == SOURCE_TYPE_SCD).count()
-    log_message(f"     Number of Caregivers records: {cg_count}")
-    log_message(f"     Number of SCD records: {scd_count}")
+    log_message(f"     Number of Caregivers records: {cg_count}", depth=1)
+    log_message(f"     Number of SCD records: {scd_count}", depth=1)
 
     output_path = _write_dmdc_file(dmdc_df, record_count)
     _update_dmdc_checkpoint(today_start_time, output_path, record_count, query)
