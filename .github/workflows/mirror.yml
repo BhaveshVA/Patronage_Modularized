@@ -1,11 +1,13 @@
-
-name: Mirror to VA GHE via PR (SSH)
+name: Mirror main to VA GHE (SSH, force overwrite)
 
 on:
   push:
-    branches:
-      - "**"
+    branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: mirror-to-ghe-main
+  cancel-in-progress: true
 
 jobs:
   mirror:
@@ -16,56 +18,42 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false  # do not carry GitHub.com token
+          persist-credentials: false
 
       - name: Configure Git identity
         run: |
           git config user.name "BhaveshVA"
           git config user.email "bhavesh.patel3@va.gov"
 
-      - name: Compute mirror branch name
-        id: vars
-        run: |
-          TS=$(date +'%Y%m%d-%H%M%S')
-          echo "branch=mirror/${TS}" >> $GITHUB_OUTPUT
-
       - name: Setup SSH for VA GHE
         env:
           GHE_SSH_KEY: ${{ secrets.GHE_SSH_KEY }}
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           echo "$GHE_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          chmod 700 ~/.ssh
           ssh-keyscan -H va.ghe.com >> ~/.ssh/known_hosts
 
       - name: Add VA GHE remote (SSH)
+        shell: bash
         run: |
+          git remote remove ghe 2>/dev/null || true
           git remote add ghe git@va.ghe.com:software/Patronage_Modularized.git
 
-      - name: Push to mirror branch on VA GHE (SSH)
+      - name: Force mirror main -> main on GHE
+        shell: bash
         run: |
-          SRC_BRANCH="$(git branch --show-current)"
-          git checkout -B "${{ steps.vars.outputs.branch }}" "origin/${SRC_BRANCH}"
-          git push ghe "${{ steps.vars.outputs.branch }}"
+          set -euo pipefail
+          git fetch origin "+refs/heads/main:refs/remotes/origin/main"
+          git push --force ghe "origin/main:refs/heads/main"
 
-      # (Optional) Push tags—uncomment if desired AND allowed by rules
-      # - name: Push tags to VA GHE
+      # Optional: mirror tags too
+      # - name: Mirror tags to GHE (force)
+      #   shell: bash
       #   run: |
-      #     git push ghe --tags || true
-
-      # ---- PR creation using preinstalled GitHub CLI ----
-      # The GitHub CLI ('gh') is preinstalled on GitHub-hosted runners.
-      # Set GH_TOKEN to a minimal GHE PAT with 'repo' scope and SAML auth,
-      # and GH_HOST to your GHE hostname to create the PR via API.
-      - name: Create PR on VA GHE
-        if: ${{ secrets.GHE_PR_TOKEN != '' }}
-        env:
-          GH_TOKEN: ${{ secrets.GHE_PR_TOKEN }}
-          GH_HOST: va.ghe.com
-        run: |
-          gh pr create \
-            --repo software/Patronage_Modularized \
-            --base main \
-            --head "${{ steps.vars.outputs.branch }}" \
-            --title "Mirror: ${{ steps.vars.outputs.branch }}" \
-            --body "Automated mirror from GitHub via SSH. This PR aligns with repo rules (PRs + CodeQL). Please merge after required checks pass."
+      #     set -euo pipefail
+      #     git fetch --tags origin
+      #     git push --force ghe --tags
