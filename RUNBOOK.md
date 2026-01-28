@@ -17,6 +17,7 @@ The pipeline:
 - Runs scheduled tasks:
   - DMDC export on Wed/Fri (incremental window based on a checkpoint table)
   - Monthly EDIPI backfill on the last Friday of the month
+  - Monthly deep-clone backups on the last day of the month
 
 Important invariants:
 - UTC is the source of truth. The pipeline anchors Spark session timezone and Python date logic to UTC.
@@ -83,6 +84,15 @@ SELECT
   count(*) AS total_rows,
   sum(CASE WHEN RecordStatus = true THEN 1 ELSE 0 END) AS active_rows
 FROM patronage_unified;
+```
+
+### 1.5 Confirm pipeline log table exists
+
+```sql
+SELECT
+  count(*) AS total_rows,
+  max(run_timestamp_utc) AS last_run
+FROM patronage_pipeline_log;
 ```
 
 ---
@@ -156,6 +166,24 @@ LIMIT 10;
 
 - File written: `LAGGED_EDIPI_PATRONAGE_YYYYMMDD.txt` under `DMDC_EXPORT_DIR`
 - Patronage table updated to populate `edipi` for eligible active rows
+
+### 3.5 Monthly backups expectations (last day of month)
+
+- Deep-clone snapshots are written to the configured backup locations:
+  - `PATRONAGE_BACKUP_DIR`
+  - `DMDC_CHECKPOINT_BACKUP_DIR`
+  - `PATRONAGE_PIPELINE_LOG_BACKUP_DIR`
+
+### 3.6 Pipeline log expectations
+
+- A new row is inserted into `patronage_pipeline_log` per run.
+
+```sql
+SELECT *
+FROM patronage_pipeline_log
+ORDER BY run_timestamp_utc DESC
+LIMIT 5;
+```
 
 ---
 

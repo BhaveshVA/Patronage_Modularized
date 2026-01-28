@@ -19,6 +19,8 @@ This pipeline is organized around a few core responsibilities:
 - **Scheduled tasks**:
   - Monthly EDIPI backfill (last Friday of the month).
   - DMDC export on Wed/Fri with an incremental extraction window based on a checkpoint table.
+  - Monthly deep-clone backups (last day of the month).
+- **Pipeline logging**: writes run metadata and counts to `patronage_pipeline_log`.
 
 ## Public entrypoint
 - `run_pipeline(processing_mode, verbose_logging=False)`
@@ -223,6 +225,7 @@ After a successful run, a new hire should sanity-check:
 - On Wed/Fri, DMDC export may trigger; when it does:
   - a file named like `PATRONAGE_YYYYMMDD.txt` is written under `DMDC_EXPORT_DIR`
   - a new row is inserted into the DMDC checkpoint table (`dmdc_checkpoint`).
+- A new row is inserted into the pipeline log table (`patronage_pipeline_log`).
 
 ---
 
@@ -235,9 +238,15 @@ All values below live in `patronage_modularized/config.py`.
   - `PATRONAGE_TABLE_PATH = "dbfs:/user/hive/warehouse/patronage_unified"`
 - **DMDC checkpoint table**
   - `DMDC_CHECKPOINT_TABLE_NAME = "dmdc_checkpoint"`
+- **Pipeline log table**
+  - `PATRONAGE_PIPELINE_LOG_TABLE_NAME = "patronage_pipeline_log"`
 - **DMDC export directory**
   - `DMDC_EXPORT_DIR = "dbfs:/mnt/ci-patronage/dmdc_extracts/combined_export"`
   - The writer converts DBFS paths to a local `/dbfs/...` FUSE path before using pandas.
+- **Monthly backup locations**
+  - `PATRONAGE_BACKUP_DIR = "dbfs:/mnt/ci-patronage/backups/patronage_unified"`
+  - `DMDC_CHECKPOINT_BACKUP_DIR = "dbfs:/mnt/ci-patronage/backups/dmdc_checkpoint"`
+  - `PATRONAGE_PIPELINE_LOG_BACKUP_DIR = "dbfs:/mnt/ci-patronage/backups/patronage_pipeline_log"`
 
 ### Inbound sources (file discovery rules)
 Inbound discovery is driven by `PIPELINE_CONFIG`:
