@@ -10,6 +10,7 @@ This checklist validates the behavior and outputs of the `patronage_modularized`
   - `patronage_unified`
   - `dmdc_checkpoint`
   - `correlation_lookup`
+  - `patronage_pipeline_log`
 
 ## 2) Patronage table checks (high-level)
 - Row counts (total + active):
@@ -44,3 +45,8 @@ This checklist validates the behavior and outputs of the `patronage_modularized`
 ## 6) Performance sanity
 - Verify no unexpected full scans on daily update runs.
 - Confirm identity lookup refresh runs (daily rebuild behavior).
+
+## 7) Pipeline log checks
+- Confirm a log row is written per run:
+  - `SELECT * FROM patronage_pipeline_log ORDER BY run_timestamp_utc DESC LIMIT 5`
+- Confirm status and counts are populated for the latest run.
