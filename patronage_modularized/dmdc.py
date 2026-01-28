@@ -21,7 +21,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import Any, Dict, Tuple
 
 from databricks.sdk.runtime import *
 from pyspark.sql import DataFrame
@@ -213,7 +213,7 @@ def _update_dmdc_checkpoint(today_start_time: datetime, output_path: str, record
         log_message(f"Failed to update DMDC checkpoint table. Error: {e}", level="ERROR", depth=2)
 
 
-def generate_dmdc_transfer_file() -> None:
+def generate_dmdc_transfer_file() -> Dict[str, Any]:
     """Generate and checkpoint the DMDC export file for the current run window.
 
     Workflow:
@@ -237,7 +237,11 @@ def generate_dmdc_transfer_file() -> None:
 
     if record_count == 0:
         log_message("No new records to send to DMDC.", depth=1)
-        return
+        return {
+            "triggered": True,
+            "record_count": 0,
+            "filename": None,
+        }
 
     from . import config
 
@@ -250,3 +254,8 @@ def generate_dmdc_transfer_file() -> None:
     _update_dmdc_checkpoint(today_start_time, output_path, record_count, query)
 
     log_message("DMDC Data Transfer File Generation complete.", depth=1)
+    return {
+        "triggered": True,
+        "record_count": record_count,
+        "filename": output_path,
+    }

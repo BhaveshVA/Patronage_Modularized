@@ -1,0 +1,11 @@
+name: CodeQL (disabled - Default Setup only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disabled
+        run: echo "CodeQL advanced workflow disabled; using Default Setup."
