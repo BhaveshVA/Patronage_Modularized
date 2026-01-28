@@ -1,30 +1,66 @@
 
-name: Mirror to VA GHE
+name: Mirror to VA GHE via PR
 
 on:
   push:
     branches:
-      - "**"         # Trigger on all branches
-  workflow_dispatch:   # Allow manual trigger
+      - "**"        # Mirror on any branch push in the source repo
+  workflow_dispatch:  # Allow manual runs
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout source repo
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for mirroring
+          fetch-depth: 0
+          persist-credentials: false  # ensure we only use your PAT to push to GHE
 
-      - name: Configure Git
+      - name: Configure Git identity
         run: |
-          git config user.name "BhaveshVA"                # GitHub username
-          git config user.email "bhavesh.patel3@va.gov"   # Your email
+          git config user.name "BhaveshVA"
+          git config user.email "bhavesh.patel3@va.gov"
 
-      - name: Push to VA GHE
+      - name: Compute mirror branch name
+        id: vars
+        run: |
+          TS=$(date +'%Y%m%d-%H%M%S')
+          echo "branch=mirror/${TS}" >> $GITHUB_OUTPUT
+
+      - name: Add VA GHE remote (HTTPS with PAT)
         env:
           GHE_PAT: ${{ secrets.GHE_PAT }}
         run: |
+          # PAT must have: repo + workflow scopes and be SAML-authorized for the 'software' org
           git remote add ghe https://$GHE_PAT@va.ghe.com/software/Patronage_Modularized.git
-          git push ghe --all
-          git push ghe --tags
+
+      - name: Push to mirror branch on VA GHE
+        run: |
+          # Create/update a branch (based on current branch in the source repo)
+          SRC_BRANCH="$(git branch --show-current)"
+          git checkout -B "${{ steps.vars.outputs.branch }}" "origin/${SRC_BRANCH}"
+          git push ghe "${{ steps.vars.outputs.branch }}"
+
+      # (Optional) Push tags—uncomment if your ruleset allows
+      # - name: Push tags to VA GHE
+      #   run: |
+      #     git push ghe --tags || true
+
+      - name: Install GitHub CLI
+        uses: cli/cli@v2
+        with:
+          version: latest
+
+      - name: Open PR on VA GHE
+        env:
+          GH_TOKEN: ${{ secrets.GHE_PAT }}
+          GH_HOST: va.ghe.com
+        run: |
+          gh pr create \
+            --repo software/Patronage_Modularized \
+            --base main \
+            --head "${{ steps.vars.outputs.branch }}" \
+            --title "Mirror: ${{ steps.vars.outputs.branch }}" \
+            --body "Automated mirror from GitHub. This PR aligns with repo rules (PRs + CodeQL). Please merge after required checks pass."
