@@ -1,0 +1,30 @@
+
+name: Mirror to VA GHE
+
+on:
+  push:
+    branches:
+      - "**"         # Trigger on all branches
+  workflow_dispatch:   # Allow manual trigger
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for mirroring
+
+      - name: Configure Git
+        run: |
+          git config user.name "BhaveshVA"                # GitHub username
+          git config user.email "bhavesh.patel3@va.gov"   # Your email
+
+      - name: Push to VA GHE
+        env:
+          GHE_PAT: ${{ secrets.GHE_PAT }}
+        run: |
+          git remote add ghe https://$GHE_PAT@va.ghe.com/software/Patronage_Modularized.git
+          git push ghe --all
+          git push ghe --tags
