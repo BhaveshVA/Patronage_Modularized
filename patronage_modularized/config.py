@@ -484,4 +484,33 @@ DUP_IDENTITY_TABLE_NAME = "duplicate_correlations"
 DUP_IDENTITY_TABLE_PATH = f"/mnt/ci-patronage/delta_tables/{DUP_IDENTITY_TABLE_NAME}"
 DMDC_CHECKPOINT_TABLE_NAME = "dmdc_checkpoint"
 
+PATRONAGE_PIPELINE_LOG_TABLE_NAME = "patronage_pipeline_log"
+
+PATRONAGE_PIPELINE_LOG_SCHEMA = """
+    run_id STRING,
+    run_timestamp_utc TIMESTAMP,
+    processing_mode STRING,
+    status STRING,
+    error_message STRING,
+    duration_seconds DOUBLE,
+    patronage_table_detail STRING,
+    identity_correlation_detail STRING,
+    file_discovery_detail STRING,
+    records_processed_detail STRING,
+    scheduled_tasks_detail STRING,
+    input_watermarks STRING,
+    output_row_counts_by_batch STRING,
+    dmdc_export_stats STRING,
+    edipi_backfill_stats STRING,
+    backup_stats STRING
+"""
+
 DMDC_EXPORT_DIR = "dbfs:/mnt/ci-patronage/dmdc_extracts/combined_export"
+
+# =====================================================================================
+# BACKUP CONFIGURATION (Monthly Deep Clone)
+# =====================================================================================
+
+PATRONAGE_BACKUP_DIR = "dbfs:/mnt/ci-patronage/backups/patronage_unified"
+DMDC_CHECKPOINT_BACKUP_DIR = "dbfs:/mnt/ci-patronage/backups/dmdc_checkpoint"
+PATRONAGE_PIPELINE_LOG_BACKUP_DIR = "dbfs:/mnt/ci-patronage/backups/patronage_pipeline_log"

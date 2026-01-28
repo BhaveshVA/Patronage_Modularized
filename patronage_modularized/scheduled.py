@@ -19,7 +19,7 @@ Databricks assumptions:
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Dict, Optional, Tuple
 
 from databricks.sdk.runtime import *
 from delta.tables import DeltaTable
@@ -29,12 +29,17 @@ from pyspark.sql.functions import col
 from .config import (
     DMDC_ELIGIBILITY_FILTER,
     DMDC_EXPORT_DIR,
+    DMDC_CHECKPOINT_TABLE_NAME,
     IDENTITY_TABLE_NAME,
     PIPELINE_CONFIG,
     PATRONAGE_TABLE_NAME,
+    PATRONAGE_PIPELINE_LOG_TABLE_NAME,
     PY_DATE_COMPACT_FORMAT,
     SOURCE_TYPE_CG,
     SOURCE_TYPE_SCD,
+    PATRONAGE_BACKUP_DIR,
+    DMDC_CHECKPOINT_BACKUP_DIR,
+    PATRONAGE_PIPELINE_LOG_BACKUP_DIR,
     build_dmdc_record_sql,
     log_message,
     write_unix_text_file_no_blank_eof,
@@ -62,6 +67,58 @@ def is_last_friday_of_month(run_date: Optional[date] = None) -> bool:
         return False
 
     return (run_date + timedelta(days=7)).month != run_date.month
+
+
+def is_last_day_of_month(run_date: Optional[date] = None) -> bool:
+    """Return True if `run_date` is the last day of its month (UTC).
+
+    Args:
+        run_date: Date to test. Defaults to `date.today()` in UTC.
+
+    Returns:
+        True if `run_date` is the final calendar day of the month.
+    """
+    if run_date is None:
+        run_date = datetime.now(timezone.utc).date()
+
+    return (run_date + timedelta(days=1)).month != run_date.month
+
+
+def run_monthly_backups() -> None:
+    """Deep clone key tables into fixed monthly backup locations.
+
+    Notes:
+        - Overwrites the target backup path each run.
+        - Intended to be called only on the last day of the month.
+    """
+    log_message("Starting monthly deep-clone backups...", depth=1)
+
+    try:
+        spark.sql(
+            f"""
+            CREATE OR REPLACE TABLE delta.`{PATRONAGE_BACKUP_DIR}`
+            DEEP CLONE {PATRONAGE_TABLE_NAME}
+            """
+        )
+
+        spark.sql(
+            f"""
+            CREATE OR REPLACE TABLE delta.`{DMDC_CHECKPOINT_BACKUP_DIR}`
+            DEEP CLONE {DMDC_CHECKPOINT_TABLE_NAME}
+            """
+        )
+
+        spark.sql(
+            f"""
+            CREATE OR REPLACE TABLE delta.`{PATRONAGE_PIPELINE_LOG_BACKUP_DIR}`
+            DEEP CLONE {PATRONAGE_PIPELINE_LOG_TABLE_NAME}
+            """
+        )
+
+        log_message("Monthly deep-clone backups completed.", depth=1)
+    except Exception as e:
+        log_message(f"Monthly backup failed: {e}", level="ERROR", depth=1)
+        raise
 
 
 def _get_edipi_backfill_candidates() -> Optional[DataFrame]:
@@ -119,7 +176,7 @@ def _get_edipi_backfill_candidates() -> Optional[DataFrame]:
     return backfill_candidates
 
 
-def _generate_edipi_backfill_file(backfill_candidates: DataFrame) -> None:
+def _generate_edipi_backfill_file(backfill_candidates: DataFrame) -> Tuple[Optional[str], int]:
     """Write a DMDC-format export file for the backfilled EDIPI population.
 
     Args:
@@ -149,6 +206,7 @@ def _generate_edipi_backfill_file(backfill_candidates: DataFrame) -> None:
     output_path = f"{DMDC_EXPORT_DIR}/{output_filename}"
 
     pandas_df = spark.sql(dmdc_query)[["record"]].toPandas()
+    record_count = len(pandas_df)
 
     if not pandas_df.empty:
         records = pandas_df["record"].astype(str).tolist()
@@ -159,8 +217,10 @@ def _generate_edipi_backfill_file(backfill_candidates: DataFrame) -> None:
 
         if config.LOGGING_VERBOSE:
             log_message(f"DMDC backfill data:\n{pandas_df.to_string()}", level="DEBUG", depth=2)
-    else:
-        log_message("No data to write for DMDC backfill file.", level="DEBUG", depth=2)
+        return output_path, record_count
+
+    log_message("No data to write for DMDC backfill file.", level="DEBUG", depth=2)
+    return None, 0
 
 
 def _update_patronage_with_backfilled_edipis(backfill_candidates: DataFrame) -> int:
@@ -208,7 +268,7 @@ def _update_patronage_with_backfilled_edipis(backfill_candidates: DataFrame) -> 
     return total_updated
 
 
-def run_edipi_backfill() -> None:
+def run_edipi_backfill() -> Dict[str, Any]:
     """Run the full EDIPI backfill workflow.
 
     Workflow:
@@ -227,18 +287,27 @@ def run_edipi_backfill() -> None:
 
         if backfill_candidates is None:
             log_message("EDIPI Backfill process complete - no candidates found.", depth=1)
-            return
+            return {
+                "triggered": True,
+                "record_count": 0,
+                "filename": None,
+            }
 
         backfill_candidates = backfill_candidates.persist()
         _ = backfill_candidates.count()
 
-        _generate_edipi_backfill_file(backfill_candidates)
+        output_path, record_count = _generate_edipi_backfill_file(backfill_candidates)
 
         total_updated = _update_patronage_with_backfilled_edipis(backfill_candidates)
         log_message(
             f"EDIPI Backfill process completed successfully. Total records updated: {total_updated:,}",
             depth=1,
         )
+        return {
+            "triggered": True,
+            "record_count": record_count,
+            "filename": output_path,
+        }
 
     except Exception as e:
         log_message(f"An error occurred during the EDIPI backfill process: {e}", level="ERROR")

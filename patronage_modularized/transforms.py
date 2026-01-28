@@ -489,7 +489,7 @@ def create_and_transform_source_dataframe(
     processing_mode: str,
     use_seed_data: bool = False,
     pt_data: Optional[DataFrame] = None,
-) -> Optional[DataFrame]:
+) -> Tuple[Optional[DataFrame], int]:
     """Read raw source files and return a standardized DataFrame for merge.
 
     Args:
@@ -501,7 +501,8 @@ def create_and_transform_source_dataframe(
             PT data is loaded via `get_pt_data_for_mode`.
 
     Returns:
-        Standardized DataFrame ready for SCD2 merge, or None if no rows.
+        Tuple of (Standardized DataFrame ready for SCD2 merge, or None if no rows,
+        raw_row_count for the source read).
 
     Notes:
                 - For SCD with no inbound files, we return None (or an empty skeleton
@@ -509,6 +510,7 @@ def create_and_transform_source_dataframe(
         - Adds `SCDType2_OPERATION_KEY` used by downstream merge logic.
     """
     transformed_df: Optional[DataFrame] = None
+    raw_row_count = 0
 
     if use_seed_data:
         # Seed is CG-only; maintained as a supported code path.
@@ -520,6 +522,7 @@ def create_and_transform_source_dataframe(
                 to_timestamp(lit(PIPELINE_CONFIG[source_type]["beginning_date"]), SPARK_DATETIME_FORMAT),
             )
         )
+        raw_row_count = raw_df.count()
         transformed_df = transform_caregiver_data(raw_df)
     else:
         if not file_list:
@@ -544,6 +547,8 @@ def create_and_transform_source_dataframe(
                 )
             )
 
+        raw_row_count = raw_df.count()
+
         if source_type == SOURCE_TYPE_CG:
             transformed_df = transform_caregiver_data(raw_df)
         elif source_type == SOURCE_TYPE_SCD:
@@ -552,10 +557,10 @@ def create_and_transform_source_dataframe(
             transformed_df = transform_scd_data(raw_df, pt_data, processing_mode)
 
     if transformed_df is None or transformed_df.isEmpty():
-        return None
+        return None, raw_row_count
 
     final_df = _standardize_columns_for_merge(transformed_df, source_type)
-    return final_df.withColumn("SCDType2_OPERATION_KEY", SPARK_CONFIG[source_type]["concat_column"])
+    return final_df.withColumn("SCDType2_OPERATION_KEY", SPARK_CONFIG[source_type]["concat_column"]), raw_row_count
 
 
 def initialize_caregiver_seed_data() -> DataFrame:

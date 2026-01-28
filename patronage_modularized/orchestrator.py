@@ -244,7 +244,10 @@ Troubleshooting themes:
 """
 
 from __future__ import annotations
-from typing import Any
+import json
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional, Tuple
 
 from databricks.sdk.runtime import *
 from delta.tables import DeltaTable
@@ -252,21 +255,27 @@ from delta.tables import DeltaTable
 from . import config, state
 from .config import (
     DMDC_CHECKPOINT_TABLE_NAME,
+    DUP_IDENTITY_TABLE_NAME,
+    IDENTITY_TABLE_NAME,
     PATRONAGE_TABLE_CLUSTER_COLUMNS,
     PATRONAGE_TABLE_NAME,
     PATRONAGE_TABLE_PATH,
     PATRONAGE_TABLE_SCHEMA,
+    PATRONAGE_PIPELINE_LOG_SCHEMA,
+    PATRONAGE_PIPELINE_LOG_TABLE_NAME,
     PIPELINE_CONFIG,
     SOURCE_TYPE_CG,
     SOURCE_TYPE_SCD,
+    PY_DATE_FORMAT,
+    PY_DATETIME_FORMAT,
     log_message,
     optimize_delta_table,
 )
-from .discovery import discover_unprocessed_files
+from .discovery import _calculate_time_boundary, _get_last_processed_timestamp, discover_unprocessed_files
 from .dmdc import generate_dmdc_transfer_file, is_dmdc_transfer_day
 from .identity import initialize_identity_lookup
 from .scd2 import execute_scd_pipeline_for_source
-from .scheduled import is_last_friday_of_month, run_edipi_backfill
+from .scheduled import is_last_day_of_month, is_last_friday_of_month, run_edipi_backfill, run_monthly_backups
 from .transforms import create_and_transform_source_dataframe, get_pt_data_for_mode, initialize_caregiver_seed_data
 
 
@@ -334,8 +343,17 @@ def initialize_all_tables() -> None:
     spark.sql(checkpoint_create_sql)
     log_message(f"Table '{DMDC_CHECKPOINT_TABLE_NAME}' is ready.", level="DEBUG", depth=1)
 
+    log_message(f"Initializing table: {PATRONAGE_PIPELINE_LOG_TABLE_NAME}", depth=1)
+    pipeline_log_create_sql = f"""
+        CREATE TABLE IF NOT EXISTS {PATRONAGE_PIPELINE_LOG_TABLE_NAME} (
+            {PATRONAGE_PIPELINE_LOG_SCHEMA}
+        )
+    """
+    spark.sql(pipeline_log_create_sql)
+    log_message(f"Table '{PATRONAGE_PIPELINE_LOG_TABLE_NAME}' is ready.", level="DEBUG", depth=1)
 
-def process_patronage_data(processing_mode: str, verbose_logging: bool = False) -> bool:
+
+def process_patronage_data(processing_mode: str, verbose_logging: bool = False) -> Tuple[bool, Dict[str, int]]:
     """Run the core Patronage processing for SCD/CG sources.
 
     Args:
@@ -345,7 +363,9 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
         verbose_logging: Enables additional debug metrics and counts.
 
     Returns:
-        True if any new source files were processed; otherwise False.
+        Tuple of:
+            - True if any new source files were processed; otherwise False.
+            - Dict of raw/processed row counts by source.
 
     High-level workflow:
         1) Initialize Delta tables and shared state.
@@ -361,6 +381,13 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
     config.LOGGING_VERBOSE = verbose_logging
     log_message(f"Starting Patronage Pipeline in {processing_mode.upper()} mode")
     pipeline_timer = config.Stopwatch()
+
+    raw_processed_counts: Dict[str, int] = {
+        "raw_cg_rows": 0,
+        "processed_cg_rows": 0,
+        "raw_scd_rows": 0,
+        "processed_scd_rows": 0,
+    }
 
     try:
         if processing_mode == "rebuild":
@@ -389,6 +416,9 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
                 ):
                     log_message("Processing CG seed data for initial table population...", depth=1)
                     transformed_cg_seed_df = initialize_caregiver_seed_data()
+                    cg_seed_count = transformed_cg_seed_df.count()
+                    raw_processed_counts["raw_cg_rows"] += cg_seed_count
+                    raw_processed_counts["processed_cg_rows"] += cg_seed_count
                     execute_scd_pipeline_for_source(transformed_cg_seed_df, SOURCE_TYPE_CG)
 
                 if processing_mode == "update" and source_type == SOURCE_TYPE_SCD:
@@ -402,12 +432,15 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
                             f"Processing file {i+1}/{len(unprocessed_files[source_type])}: {file_path.split('/')[-1]}",
                             depth=2,
                         )
-                        transformed_df = create_and_transform_source_dataframe(
+                        transformed_df, raw_count = create_and_transform_source_dataframe(
                             source_type,
                             [(file_path, mod_time)],
                             processing_mode,
                             pt_data=pt_data_for_source,
                         )
+                        raw_processed_counts["raw_scd_rows"] += raw_count
+                        if transformed_df is not None:
+                            raw_processed_counts["processed_scd_rows"] += transformed_df.count()
                         execute_scd_pipeline_for_source(transformed_df, source_type)
                         log_message(
                             f"Finished file {i+1} in {file_timer.format()}.",
@@ -419,12 +452,20 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
                         f"Processing {len(unprocessed_files[source_type])} {source_type} file(s) in a single batch...",
                         depth=1,
                     )
-                    transformed_df = create_and_transform_source_dataframe(
+                    transformed_df, raw_count = create_and_transform_source_dataframe(
                         source_type,
                         unprocessed_files[source_type],
                         processing_mode,
                         pt_data=pt_data_for_source,
                     )
+                    if source_type == SOURCE_TYPE_CG:
+                        raw_processed_counts["raw_cg_rows"] += raw_count
+                        if transformed_df is not None:
+                            raw_processed_counts["processed_cg_rows"] += transformed_df.count()
+                    else:
+                        raw_processed_counts["raw_scd_rows"] += raw_count
+                        if transformed_df is not None:
+                            raw_processed_counts["processed_scd_rows"] += transformed_df.count()
                     execute_scd_pipeline_for_source(transformed_df, source_type)
                     log_message(
                         f"Finished processing all '{source_type}' files in {batch_timer.format()}.",
@@ -437,7 +478,7 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
             log_message("No unprocessed SCD or CG files found. Skipping main processing.")
 
         has_processed = any(unprocessed_files.values())
-        return has_processed
+        return has_processed, raw_processed_counts
 
     except Exception as e:
         log_message(f"An error occurred during data processing: {e}", level="ERROR")
@@ -449,6 +490,106 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
             state.pt_data_cache = None
 
         log_message(f"Patronage Pipeline ({processing_mode.upper()}) finished in {pipeline_timer.format()}.")
+
+
+def _safe_table_count(table_name: str) -> Optional[int]:
+    try:
+        return spark.table(table_name).count()
+    except Exception:
+        return None
+
+
+def _safe_scalar(query: str) -> Optional[Any]:
+    try:
+        result = spark.sql(query).collect()
+        return result[0][0] if result else None
+    except Exception:
+        return None
+
+
+def _to_iso(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
+def _build_file_discovery_detail(processing_mode: str, unprocessed_files: Dict[str, Any]) -> Dict[str, Any]:
+    time_boundary_utc = _calculate_time_boundary(processing_mode)
+    scd_start_time = None
+    cg_start_time = None
+
+    for source_type, cfg in PIPELINE_CONFIG.items():
+        start_time_utc = None
+        if processing_mode == "update":
+            start_time_utc = _get_last_processed_timestamp(source_type)
+
+        if start_time_utc is None and "beginning_date" in cfg:
+            date_format = PY_DATE_FORMAT if source_type == SOURCE_TYPE_SCD else PY_DATETIME_FORMAT
+            start_time_naive = datetime.strptime(cfg["beginning_date"], date_format)
+            start_time_utc = start_time_naive.replace(tzinfo=timezone.utc)
+
+        if source_type == SOURCE_TYPE_SCD:
+            scd_start_time = start_time_utc
+        elif source_type == SOURCE_TYPE_CG:
+            cg_start_time = start_time_utc
+
+    return {
+        "scd_start_date": _to_iso(scd_start_time),
+        "cg_start_date": _to_iso(cg_start_time),
+        "end_date": _to_iso(time_boundary_utc),
+        "total_cg_files": len(unprocessed_files.get(SOURCE_TYPE_CG, [])),
+        "total_scd_files": len(unprocessed_files.get(SOURCE_TYPE_SCD, [])),
+    }
+
+
+def _build_output_row_counts_by_batch() -> Dict[str, Any]:
+    result = {
+        SOURCE_TYPE_SCD: {"active": 0, "new": 0, "expired": 0},
+        SOURCE_TYPE_CG: {"active": 0, "new": 0, "expired": 0},
+    }
+
+    try:
+        active_rows = spark.sql(
+            f"""
+            SELECT Batch_CD, COUNT(*) AS cnt
+            FROM {PATRONAGE_TABLE_NAME}
+            WHERE RecordStatus = true
+            GROUP BY Batch_CD
+            """
+        ).collect()
+        for row in active_rows:
+            if row["Batch_CD"] in result:
+                result[row["Batch_CD"]]["active"] = row["cnt"]
+
+        new_rows = spark.sql(
+            f"""
+            SELECT Batch_CD, COUNT(*) AS cnt
+            FROM {PATRONAGE_TABLE_NAME}
+            WHERE RecordChangeStatus = 'New Record'
+            GROUP BY Batch_CD
+            """
+        ).collect()
+        for row in new_rows:
+            if row["Batch_CD"] in result:
+                result[row["Batch_CD"]]["new"] = row["cnt"]
+
+        expired_rows = spark.sql(
+            f"""
+            SELECT Batch_CD, COUNT(*) AS cnt
+            FROM {PATRONAGE_TABLE_NAME}
+            WHERE RecordChangeStatus = 'Expired Record'
+            GROUP BY Batch_CD
+            """
+        ).collect()
+        for row in expired_rows:
+            if row["Batch_CD"] in result:
+                result[row["Batch_CD"]]["expired"] = row["cnt"]
+    except Exception:
+        pass
+
+    return result
 
 
 def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
@@ -465,11 +606,29 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
           - Last Friday of month: EDIPI backfill.
           - Wed/Fri: DMDC export.
     """
+    run_id = str(uuid.uuid4())
+    run_start_utc = datetime.now(timezone.utc)
+    status = "SUCCESS"
+    error_message = None
+
+    patronage_rows_before = _safe_table_count(PATRONAGE_TABLE_NAME)
+
+    raw_processed_counts: Dict[str, int] = {
+        "raw_cg_rows": 0,
+        "processed_cg_rows": 0,
+        "raw_scd_rows": 0,
+        "processed_scd_rows": 0,
+    }
+
+    dmdc_export_stats: Dict[str, Any] = {"triggered": False, "record_count": 0, "filename": None}
+    edipi_backfill_stats: Dict[str, Any] = {"triggered": False, "record_count": 0, "filename": None}
+    backup_stats: Dict[str, Any] = {"triggered": False, "status": None}
+
     try:
         spark.conf.set("spark.sql.session.timeZone", "UTC")
         log_message("Pinned spark.sql.session.timeZone to UTC", level="DEBUG", depth=1)
 
-        has_processed = process_patronage_data(processing_mode, verbose_logging)
+        has_processed, raw_processed_counts = process_patronage_data(processing_mode, verbose_logging)
         if has_processed:
             optimize_delta_table(PATRONAGE_TABLE_NAME)
 
@@ -477,16 +636,96 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
 
         if is_last_friday_of_month():
             log_message("Task triggered: EDIPI Backfill", depth=1)
-            run_edipi_backfill()
+            edipi_backfill_stats = run_edipi_backfill()
         else:
             log_message("Skipping EDIPI Backfill (not last Friday of the month).", level="DEBUG", depth=1)
 
         if is_dmdc_transfer_day():
             log_message("Task triggered: DMDC Export", depth=1)
-            generate_dmdc_transfer_file()
+            dmdc_export_stats = generate_dmdc_transfer_file()
         else:
             log_message("Skipping DMDC Export (not a transfer day).", level="DEBUG", depth=1)
 
+        if is_last_day_of_month():
+            log_message("Task triggered: Monthly Backups", depth=1)
+            backup_stats["triggered"] = True
+            run_monthly_backups()
+            backup_stats["status"] = "SUCCESS"
+        else:
+            log_message("Skipping Monthly Backups (not last day of the month).", level="DEBUG", depth=1)
+
     except Exception as e:
+        status = "FAILED"
+        error_message = str(e)
+        if backup_stats.get("triggered"):
+            backup_stats["status"] = "FAILED"
         log_message(f"FATAL: An error occurred during the main pipeline execution: {e}", level="ERROR")
         raise
+
+    finally:
+        run_end_utc = datetime.now(timezone.utc)
+        duration_seconds = (run_end_utc - run_start_utc).total_seconds()
+
+        patronage_rows_after = _safe_table_count(PATRONAGE_TABLE_NAME)
+        patronage_table_detail = {
+            "table_name": PATRONAGE_TABLE_NAME,
+            "rows_before": patronage_rows_before,
+            "rows_after": patronage_rows_after,
+            "rows_added": None
+            if patronage_rows_before is None or patronage_rows_after is None
+            else patronage_rows_after - patronage_rows_before,
+        }
+
+        identity_total = _safe_table_count(IDENTITY_TABLE_NAME)
+        duplicate_total = _safe_table_count(DUP_IDENTITY_TABLE_NAME)
+        identity_correlation_detail = {
+            "table_name": IDENTITY_TABLE_NAME,
+            "total_rows": identity_total,
+            "duplicate_table_name": DUP_IDENTITY_TABLE_NAME,
+            "duplicate_rows": duplicate_total,
+        }
+
+        unprocessed_files_for_log: Dict[str, Any] = {}
+        try:
+            unprocessed_files_for_log = discover_unprocessed_files(processing_mode)
+        except Exception:
+            unprocessed_files_for_log = {}
+
+        file_discovery_detail = _build_file_discovery_detail(processing_mode, unprocessed_files_for_log)
+
+        input_watermarks = {
+            "SCD_last_processed_ts": _to_iso(_get_last_processed_timestamp(SOURCE_TYPE_SCD)),
+            "CG_last_processed_ts": _to_iso(_get_last_processed_timestamp(SOURCE_TYPE_CG)),
+        }
+
+        output_row_counts_by_batch = _build_output_row_counts_by_batch()
+
+        scheduled_tasks_detail = {
+            "dmdc_export_triggered": bool(dmdc_export_stats.get("triggered")),
+            "edipi_backfill_triggered": bool(edipi_backfill_stats.get("triggered")),
+            "backup_triggered": bool(backup_stats.get("triggered")),
+        }
+
+        log_row = {
+            "run_id": run_id,
+            "run_timestamp_utc": run_start_utc,
+            "processing_mode": processing_mode,
+            "status": status,
+            "error_message": error_message,
+            "duration_seconds": duration_seconds,
+            "patronage_table_detail": json.dumps(patronage_table_detail),
+            "identity_correlation_detail": json.dumps(identity_correlation_detail),
+            "file_discovery_detail": json.dumps(file_discovery_detail),
+            "records_processed_detail": json.dumps(raw_processed_counts),
+            "scheduled_tasks_detail": json.dumps(scheduled_tasks_detail),
+            "input_watermarks": json.dumps(input_watermarks),
+            "output_row_counts_by_batch": json.dumps(output_row_counts_by_batch),
+            "dmdc_export_stats": json.dumps(dmdc_export_stats),
+            "edipi_backfill_stats": json.dumps(edipi_backfill_stats),
+            "backup_stats": json.dumps(backup_stats),
+        }
+
+        try:
+            spark.createDataFrame([log_row]).write.insertInto(PATRONAGE_PIPELINE_LOG_TABLE_NAME)
+        except Exception as log_error:
+            log_message(f"Failed to insert pipeline log row: {log_error}", level="ERROR", depth=1)
