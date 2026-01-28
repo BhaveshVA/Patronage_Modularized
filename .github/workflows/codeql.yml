@@ -1,34 +1,11 @@
-name: CodeQL
+name: CodeQL (disabled - Default Setup only)
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
-permissions:
-  actions: read
-  contents: read
-  security-events: write
-
 jobs:
-  analyze:
-    name: Analyze
+  noop:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [ "python" ]
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: ${{ matrix.language }}
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+      - name: Disabled
+        run: echo "CodeQL advanced workflow disabled; using Default Setup."
