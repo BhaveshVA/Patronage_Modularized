@@ -251,6 +251,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from databricks.sdk.runtime import *
 from delta.tables import DeltaTable
+from pyspark.sql.types import DoubleType, StringType, StructField, StructType, TimestampType
 
 from . import config, state
 from .config import (
@@ -726,6 +727,50 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
         }
 
         try:
-            spark.createDataFrame([log_row]).write.insertInto(PATRONAGE_PIPELINE_LOG_TABLE_NAME)
+            string_fields = [
+                "run_id",
+                "processing_mode",
+                "status",
+                "error_message",
+                "patronage_table_detail",
+                "identity_correlation_detail",
+                "file_discovery_detail",
+                "records_processed_detail",
+                "scheduled_tasks_detail",
+                "input_watermarks",
+                "output_row_counts_by_batch",
+                "dmdc_export_stats",
+                "edipi_backfill_stats",
+                "backup_stats",
+            ]
+            coerced_log_row = {
+                **log_row,
+                **{key: (None if log_row.get(key) is None else str(log_row.get(key))) for key in string_fields},
+            }
+
+            log_schema = StructType(
+                [
+                    StructField("run_id", StringType(), True),
+                    StructField("run_timestamp_utc", TimestampType(), True),
+                    StructField("processing_mode", StringType(), True),
+                    StructField("status", StringType(), True),
+                    StructField("error_message", StringType(), True),
+                    StructField("duration_seconds", DoubleType(), True),
+                    StructField("patronage_table_detail", StringType(), True),
+                    StructField("identity_correlation_detail", StringType(), True),
+                    StructField("file_discovery_detail", StringType(), True),
+                    StructField("records_processed_detail", StringType(), True),
+                    StructField("scheduled_tasks_detail", StringType(), True),
+                    StructField("input_watermarks", StringType(), True),
+                    StructField("output_row_counts_by_batch", StringType(), True),
+                    StructField("dmdc_export_stats", StringType(), True),
+                    StructField("edipi_backfill_stats", StringType(), True),
+                    StructField("backup_stats", StringType(), True),
+                ]
+            )
+
+            spark.createDataFrame([coerced_log_row], schema=log_schema).write.insertInto(
+                PATRONAGE_PIPELINE_LOG_TABLE_NAME
+            )
         except Exception as log_error:
             log_message(f"Failed to insert pipeline log row: {log_error}", level="ERROR", depth=1)
