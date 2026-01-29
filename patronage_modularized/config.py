@@ -89,7 +89,9 @@ class Stopwatch:
         if unit == "seconds":
             value = self.seconds()
         elif unit == "minutes":
-            value = self.minutes()
+            total_seconds = int(round(self.seconds()))
+            minutes, seconds = divmod(total_seconds, 60)
+            return f"{minutes}m {seconds}s"
         else:
             raise ValueError("unit must be 'seconds' or 'minutes'")
 
