@@ -354,7 +354,9 @@ def initialize_all_tables() -> None:
     log_message(f"Table '{PATRONAGE_PIPELINE_LOG_TABLE_NAME}' is ready.", level="DEBUG", depth=1)
 
 
-def process_patronage_data(processing_mode: str, verbose_logging: bool = False) -> Tuple[bool, Dict[str, int]]:
+def process_patronage_data(
+    processing_mode: str, verbose_logging: bool = False
+) -> Tuple[bool, Dict[str, int], Dict[str, Any]]:
     """Run the core Patronage processing for SCD/CG sources.
 
     Args:
@@ -367,6 +369,7 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
         Tuple of:
             - True if any new source files were processed; otherwise False.
             - Dict of raw/processed row counts by source.
+            - File discovery detail snapshot (start/end window + file counts).
 
     High-level workflow:
         1) Initialize Delta tables and shared state.
@@ -399,6 +402,7 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
             raise RuntimeError("Target Delta table was not initialized.")
         initialize_identity_lookup()
         unprocessed_files = discover_unprocessed_files(processing_mode)
+        file_discovery_detail_snapshot = _build_file_discovery_detail(processing_mode, unprocessed_files)
 
         for source_type in PIPELINE_CONFIG.keys():
             if unprocessed_files[source_type]:
@@ -479,7 +483,7 @@ def process_patronage_data(processing_mode: str, verbose_logging: bool = False) 
             log_message("No unprocessed SCD or CG files found. Skipping main processing.")
 
         has_processed = any(unprocessed_files.values())
-        return has_processed, raw_processed_counts
+        return has_processed, raw_processed_counts, file_discovery_detail_snapshot
 
     except Exception as e:
         log_message(f"An error occurred during data processing: {e}", level="ERROR")
@@ -625,11 +629,15 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
     edipi_backfill_stats: Dict[str, Any] = {"triggered": False, "record_count": 0, "filename": None}
     backup_stats: Dict[str, Any] = {"triggered": False, "status": None}
 
+    file_discovery_detail_snapshot: Dict[str, Any] = {}
+
     try:
         spark.conf.set("spark.sql.session.timeZone", "UTC")
         log_message("Pinned spark.sql.session.timeZone to UTC", level="DEBUG", depth=1)
 
-        has_processed, raw_processed_counts = process_patronage_data(processing_mode, verbose_logging)
+        has_processed, raw_processed_counts, file_discovery_detail_snapshot = process_patronage_data(
+            processing_mode, verbose_logging
+        )
         if has_processed:
             optimize_delta_table(PATRONAGE_TABLE_NAME)
 
@@ -686,13 +694,7 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
             "duplicate_rows": duplicate_total,
         }
 
-        unprocessed_files_for_log: Dict[str, Any] = {}
-        try:
-            unprocessed_files_for_log = discover_unprocessed_files(processing_mode)
-        except Exception:
-            unprocessed_files_for_log = {}
-
-        file_discovery_detail = _build_file_discovery_detail(processing_mode, unprocessed_files_for_log)
+        file_discovery_detail = file_discovery_detail_snapshot
 
         input_watermarks = {
             "SCD_last_processed_ts": _to_iso(_get_last_processed_timestamp(SOURCE_TYPE_SCD)),
