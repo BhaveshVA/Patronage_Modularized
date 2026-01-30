@@ -1,5 +1,7 @@
 name: Mirror to GitHub Enterprise
 
+permissions:
+  contents: read
 on:
   push:
     branches:
