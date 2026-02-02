@@ -188,7 +188,7 @@ flowchart TD
   end
 
   subgraph Filters
-    PSA_F[Filter PSA<br/>Active/NULL + Institution SID + Latest per (ICN, SID, Identifier)]
+    PSA_F[Filter PSA<br/>Active/NULL + Institution SID + Latest per ICN/SID/Identifier]
     PERSON_F[Filter Person<br/>Latest per ICN]
     INST_F[Filter Institution<br/>Allowed SIDs]
   end
