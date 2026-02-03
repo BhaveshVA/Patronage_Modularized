@@ -69,19 +69,19 @@ def is_last_friday_of_month(run_date: Optional[date] = None) -> bool:
     return (run_date + timedelta(days=7)).month != run_date.month
 
 
-def is_last_day_of_month(run_date: Optional[date] = None) -> bool:
-    """Return True if `run_date` is the last day of its month (UTC).
+def is_first_day_of_month(run_date: Optional[date] = None) -> bool:
+    """Return True if `run_date` is the first day of its month (UTC).
 
     Args:
         run_date: Date to test. Defaults to `date.today()` in UTC.
 
     Returns:
-        True if `run_date` is the final calendar day of the month.
+        True if `run_date` is day 1 of the month.
     """
     if run_date is None:
         run_date = datetime.now(timezone.utc).date()
 
-    return (run_date + timedelta(days=1)).month != run_date.month
+    return run_date.day == 1
 
 
 def run_monthly_backups() -> None:
@@ -89,7 +89,7 @@ def run_monthly_backups() -> None:
 
     Notes:
         - Overwrites the target backup path each run.
-        - Intended to be called only on the last day of the month.
+        - Intended to be called only on the first day of the month.
     """
     log_message("Starting monthly deep-clone backups...", depth=1)
 

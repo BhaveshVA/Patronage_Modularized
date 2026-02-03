@@ -276,7 +276,7 @@ from .discovery import _calculate_time_boundary, _get_last_processed_timestamp, 
 from .dmdc import generate_dmdc_transfer_file, is_dmdc_transfer_day
 from .identity import initialize_identity_lookup
 from .scd2 import execute_scd_pipeline_for_source
-from .scheduled import is_last_day_of_month, is_last_friday_of_month, run_edipi_backfill, run_monthly_backups
+from .scheduled import is_first_day_of_month, is_last_friday_of_month, run_edipi_backfill, run_monthly_backups
 from .transforms import create_and_transform_source_dataframe, get_pt_data_for_mode, initialize_caregiver_seed_data
 
 
@@ -610,6 +610,7 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
         - Applies scheduling gates:
           - Last Friday of month: EDIPI backfill.
           - Wed/Fri: DMDC export.
+                    - First day of month: monthly backups.
     """
     run_id = str(uuid.uuid4())
     run_start_utc = datetime.now(timezone.utc)
@@ -655,13 +656,13 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
         else:
             log_message("Skipping DMDC Export (not a transfer day).", level="DEBUG", depth=1)
 
-        if is_last_day_of_month():
+        if is_first_day_of_month():
             log_message("Task triggered: Monthly Backups", depth=1)
             backup_stats["triggered"] = True
             run_monthly_backups()
             backup_stats["status"] = "SUCCESS"
         else:
-            log_message("Skipping Monthly Backups (not last day of the month).", level="DEBUG", depth=1)
+            log_message("Skipping Monthly Backups (not first day of the month).", level="DEBUG", depth=1)
 
     except Exception as e:
         status = "FAILED"

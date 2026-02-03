@@ -6,6 +6,7 @@ This folder contains the Patronage pipeline implemented as a modular Python pack
 - Operations runbook: `RUNBOOK.md`
 - Validation checklist: `VALIDATION_CHECKLIST.md`
 - Architecture diagrams: `HIGH_LEVEL_ARCHITECTURE.md`
+- Identity correlation details: `IDENTITY_CORRELATIONS.md`
 
 ## Pipeline overview
 This pipeline is organized around a few core responsibilities:
@@ -19,7 +20,7 @@ This pipeline is organized around a few core responsibilities:
 - **Scheduled tasks**:
   - Monthly EDIPI backfill (last Friday of the month).
   - DMDC export on Wed/Fri with an incremental extraction window based on a checkpoint table.
-  - Monthly deep-clone backups (last day of the month).
+  - Monthly deep-clone backups (first day of the month).
 - **Pipeline logging**: writes run metadata and counts to `patronage_pipeline_log`.
 
 ## Public entrypoint
