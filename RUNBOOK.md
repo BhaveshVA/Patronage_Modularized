@@ -174,6 +174,25 @@ LIMIT 10;
   - `DMDC_CHECKPOINT_BACKUP_DIR`
   - `PATRONAGE_PIPELINE_LOG_BACKUP_DIR`
 
+#### 3.5.1 Restore from monthly backups (corruption recovery)
+
+- The backups are intended for table restore if data becomes corrupted.
+- Restore the affected table from its backup location.
+- After restore, run `run_pipeline("update")` so the pipeline reprocesses files from the first day of that month.
+
+Example restore SQL (deep clone from backup paths):
+
+```sql
+CREATE OR REPLACE TABLE patronage_unified
+DEEP CLONE delta.`dbfs:/mnt/ci-patronage/backups/patronage_unified`;
+
+CREATE OR REPLACE TABLE dmdc_checkpoint
+DEEP CLONE delta.`dbfs:/mnt/ci-patronage/backups/dmdc_checkpoint`;
+
+CREATE OR REPLACE TABLE patronage_pipeline_log
+DEEP CLONE delta.`dbfs:/mnt/ci-patronage/backups/patronage_pipeline_log`;
+```
+
 ### 3.6 Pipeline log expectations
 
 - A new row is inserted into `patronage_pipeline_log` per run.

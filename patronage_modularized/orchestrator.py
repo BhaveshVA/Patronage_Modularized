@@ -512,6 +512,14 @@ def _safe_scalar(query: str) -> Optional[Any]:
         return None
 
 
+def _clear_spark_cache() -> None:
+    try:
+        spark.catalog.clearCache()
+        log_message("Cleared Spark cache for current session.", level="DEBUG", depth=2)
+    except Exception as e:
+        log_message(f"Failed to clear Spark cache: {e}", level="WARN", depth=2)
+
+
 def _to_iso(dt: Optional[datetime]) -> Optional[str]:
     if dt is None:
         return None
@@ -635,6 +643,7 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
     try:
         spark.conf.set("spark.sql.session.timeZone", "UTC")
         log_message("Pinned spark.sql.session.timeZone to UTC", level="DEBUG", depth=1)
+        _clear_spark_cache()
 
         has_processed, raw_processed_counts, file_discovery_detail_snapshot = process_patronage_data(
             processing_mode, verbose_logging
@@ -777,3 +786,5 @@ def run_pipeline(processing_mode: str, verbose_logging: bool = False) -> None:
             )
         except Exception as log_error:
             log_message(f"Failed to insert pipeline log row: {log_error}", level="ERROR", depth=1)
+
+        _clear_spark_cache()
