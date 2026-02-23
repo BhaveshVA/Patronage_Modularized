@@ -52,3 +52,5 @@ dist/
 # Local AI assistant instructions (do not commit)
 # =============================
 .github/copilot-instructions.md
+
+# =============================

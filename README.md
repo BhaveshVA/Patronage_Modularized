@@ -6,6 +6,7 @@ This folder contains the Patronage pipeline implemented as a modular Python pack
 - Operations runbook: `RUNBOOK.md`
 - Validation checklist: `VALIDATION_CHECKLIST.md`
 - Architecture diagrams: `HIGH_LEVEL_ARCHITECTURE.md`
+- Identity correlation details: `IDENTITY_CORRELATIONS.md`
 
 ## Pipeline overview
 This pipeline is organized around a few core responsibilities:
@@ -19,7 +20,7 @@ This pipeline is organized around a few core responsibilities:
 - **Scheduled tasks**:
   - Monthly EDIPI backfill (last Friday of the month).
   - DMDC export on Wed/Fri with an incremental extraction window based on a checkpoint table.
-  - Monthly deep-clone backups (last day of the month).
+  - Monthly deep-clone backups (first day of the month).
 - **Pipeline logging**: writes run metadata and counts to `patronage_pipeline_log`.
 
 ## Public entrypoint
@@ -269,6 +270,24 @@ If identity correlation looks “stale” or empty, this is the first place to c
 ---
 
 ## Reruns, backfills, and safe reprocessing
+
+### If a table is corrupted
+- Monthly deep-clone backups run on the first day of the month to support table restore.
+- Restore the affected table from its backup location, then run `run_pipeline("update")`.
+- Update mode will reprocess files from the first day of that month after a restore.
+
+Example restore SQL (deep clone from backup paths):
+
+```sql
+CREATE OR REPLACE TABLE patronage_unified
+DEEP CLONE delta.`dbfs:/mnt/ci-patronage/backups/patronage_unified`;
+
+CREATE OR REPLACE TABLE dmdc_checkpoint
+DEEP CLONE delta.`dbfs:/mnt/ci-patronage/backups/dmdc_checkpoint`;
+
+CREATE OR REPLACE TABLE patronage_pipeline_log
+DEEP CLONE delta.`dbfs:/mnt/ci-patronage/backups/patronage_pipeline_log`;
+```
 
 ### If a daily run failed midway
 - It is usually safe to rerun `run_pipeline("update")`. The pipeline is designed around idempotent SCD Type 2 merges and file discovery boundaries.

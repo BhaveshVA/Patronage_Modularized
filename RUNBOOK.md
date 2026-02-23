@@ -17,7 +17,7 @@ The pipeline:
 - Runs scheduled tasks:
   - DMDC export on Wed/Fri (incremental window based on a checkpoint table)
   - Monthly EDIPI backfill on the last Friday of the month
-  - Monthly deep-clone backups on the last day of the month
+  - Monthly deep-clone backups on the first day of the month
 
 Important invariants:
 - UTC is the source of truth. The pipeline anchors Spark session timezone and Python date logic to UTC.
@@ -167,12 +167,31 @@ LIMIT 10;
 - File written: `LAGGED_EDIPI_PATRONAGE_YYYYMMDD.txt` under `DMDC_EXPORT_DIR`
 - Patronage table updated to populate `edipi` for eligible active rows
 
-### 3.5 Monthly backups expectations (last day of month)
+### 3.5 Monthly backups expectations (first day of month)
 
 - Deep-clone snapshots are written to the configured backup locations:
   - `PATRONAGE_BACKUP_DIR`
   - `DMDC_CHECKPOINT_BACKUP_DIR`
   - `PATRONAGE_PIPELINE_LOG_BACKUP_DIR`
+
+#### 3.5.1 Restore from monthly backups (corruption recovery)
+
+- The backups are intended for table restore if data becomes corrupted.
+- Restore the affected table from its backup location.
+- After restore, run `run_pipeline("update")` so the pipeline reprocesses files from the first day of that month.
+
+Example restore SQL (deep clone from backup paths):
+
+```sql
+CREATE OR REPLACE TABLE patronage_unified
+DEEP CLONE delta.`dbfs:/mnt/ci-patronage/backups/patronage_unified`;
+
+CREATE OR REPLACE TABLE dmdc_checkpoint
+DEEP CLONE delta.`dbfs:/mnt/ci-patronage/backups/dmdc_checkpoint`;
+
+CREATE OR REPLACE TABLE patronage_pipeline_log
+DEEP CLONE delta.`dbfs:/mnt/ci-patronage/backups/patronage_pipeline_log`;
+```
 
 ### 3.6 Pipeline log expectations
 
